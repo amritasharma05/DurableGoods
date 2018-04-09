@@ -1,0 +1,421 @@
+---
+title: "FinalMarketingAnalytics"
+author: "Austin, Swaroop, Amrita, Preethi"
+date: "March 15, 2018"
+output:
+  word_document: default
+  html_document: default
+---
+#Importing Data and packages
+```{r}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+setwd("~/Desktop/Marketing Analytics")
+library(data.table) # Load the data.table package.
+library(MASS)
+library(foreign)
+require(sqldf)
+library(lmtest)
+library(plyr)
+
+DurData <- fread('DurData1_Final.csv')
+
+```
+
+#Setting up Data for first question
+```{r}
+Dur_Data=DurData[!duplicated(DurData),]
+
+#creating dummy variables for each category:
+Dur_Data$Category_1<-ifelse(Dur_Data$Category_Description=="TELEVISION",1,0)
+Dur_Data$Category_2<-ifelse(Dur_Data$Category_Description=="MAJORS",1,0)
+Dur_Data$Category_3<-ifelse(Dur_Data$Category_Description=="AUDIO",1,0)
+Dur_Data$Category_4<-ifelse(Dur_Data$Category_Description=="VIDEO HDWR",1,0)
+Dur_Data$Category_5<-ifelse(Dur_Data$Category_Description=="P*S*T",1,0)
+Dur_Data$Category_6<-ifelse(Dur_Data$Category_Description=="MOBILE",1,0)
+Dur_Data$Category_7<-ifelse(Dur_Data$Category_Description=="IMAGING",1,0)
+Dur_Data$Category_8<-ifelse(Dur_Data$Category_Description=="WIRELESS",1,0)
+Dur_Data$Category_9<-ifelse(Dur_Data$Category_Description=="HOME INS",1,0)
+Dur_Data$Category_10<-ifelse(Dur_Data$Category_Description=="OTHER",1,0)
+Dur_Data$Category_11<-ifelse(Dur_Data$Category_Description=="PC HDWR",1,0)
+Dur_Data$Category_12<-ifelse(Dur_Data$Category_Description=="MUSIC",1,0)
+Dur_Data$Category_13<-ifelse(Dur_Data$Category_Description=="DVS",1,0)
+Dur_Data$Category_14<-ifelse(Dur_Data$Category_Description=="INTABGIBLE",1,0)
+Dur_Data$Category_15<-ifelse(Dur_Data$Category_Description=="GIFT CARDS",1,0)
+Dur_Data$Total_Cat_Purch<-(Dur_Data$Category_1+Dur_Data$Category_2+Dur_Data$Category_3+Dur_Data$Category_4+Dur_Data$Category_5+Dur_Data$Category_6+Dur_Data$Category_7+Dur_Data$Category_8+Dur_Data$Category_9+Dur_Data$Category_10+Dur_Data$Category_11+Dur_Data$Category_12+Dur_Data$Category_13+Dur_Data$Category_14+Dur_Data$Category_15)
+# Express was left out from these categories because it only had one record, so it would not help with clustering
+
+#creating extended price for each category
+Dur_Data$ECat_1 <- ifelse( Dur_Data$Category_Description == "TELEVISION", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_2 <- ifelse( Dur_Data$Category_Description == "MAJORS", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_3 <- ifelse( Dur_Data$Category_Description == "AUDIO", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_4 <- ifelse( Dur_Data$Category_Description == "VIDEO HDWR", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_5 <- ifelse( Dur_Data$Category_Description == "P*S*T", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_6 <- ifelse( Dur_Data$Category_Description == "MOBILE", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_7 <- ifelse( Dur_Data$Category_Description == "IMAGING", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_8 <- ifelse( Dur_Data$Category_Description == "WIRELESS", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_9 <- ifelse( Dur_Data$Category_Description == "HOME INS", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_10 <- ifelse( Dur_Data$Category_Description == "OTHER", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_11 <- ifelse( Dur_Data$Category_Description == "PC HDWR", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_12 <- ifelse( Dur_Data$Category_Description == "MUSIC", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_13 <- ifelse( Dur_Data$Category_Description == "DVS", 
+                            Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_14 <- ifelse( Dur_Data$Category_Description == "INTABGIBLE", Dur_Data$EXTENDED_PRICE , 0)
+Dur_Data$ECat_15 <- ifelse( Dur_Data$Category_Description == "GIFT CARDS", Dur_Data$EXTENDED_PRICE , 0)
+
+#Excluding Unknown HH gender
+Dur_Data1=sqldf("select * from Dur_Data WHERE `GENDER_H.Head` != 'U' AND `Age_H.Head` IS NOT NULL AND `Income` IS NOT NULL")
+
+## Adding Month and Year as seperate column
+Dur_Data$TransactionDate <- as.Date(Dur_Data$Transaction_Date, "%d%b%Y")
+
+d=as.Date(Dur_Data$Transaction_Date,"%d%b%Y")
+
+Dur_Data$Transaction_month=months(d)
+Dur_Data$Transaction_year=year(d)
+
+#Demographic dummies
+Dur_Data1$HH_Age <-Dur_Data1$Age_H.Head
+Dur_Data1$HHMale<-ifelse(Dur_Data1$GENDER_H.Head=="M",1,0)
+
+Dur_Data1$Child_5_and_under<-ifelse(Dur_Data1$`MALE_CHID_AGE_0-2`==1|Dur_Data1$`MALE_CHID_AGE_3-5`==1|Dur_Data1$`FEMALE_CHID_AGE_0-2`==1|Dur_Data1$`FEMALE_CHID_AGE_3-5`==1 | Dur_Data1$`UNKNOWN_CHID_AGE_0-2`==1|Dur_Data1$`UNKNOWN_CHID_AGE_3-5`==1,1,0)
+
+Dur_Data1$Child_6_to_10<-ifelse(Dur_Data1$`UNKNOWN_CHID_AGE_6-10`=="1"|Dur_Data1$`FEMALE_CHID_AGE_6-10`=="1"|Dur_Data1$`MALE_CHID_AGE_6-10`=="1",1,0)
+
+Dur_Data1$Child_11_to_17<-ifelse(Dur_Data1$`MALE_CHID_AGE_11-15`==1|Dur_Data1$`MALE_CHID_AGE_16-17`==1|Dur_Data1$`FEMALE_CHID_AGE_11-15`==1|Dur_Data1$`FEMALE_CHID_AGE_16-17`==1 | Dur_Data1$`UNKNOWN_CHID_AGE_11-15`==1|Dur_Data1$`UNKNOWN_CHID_AGE_16-17`==1,1,0)
+
+
+## create income brackets 
+Dur_Data1$Income_1_to_3<-ifelse(Dur_Data1$Income<=3,1,0)
+Dur_Data1$Income_4_to_7<-ifelse(Dur_Data1$Income<=7 & Dur_Data1$Income>3 ,1,0)
+Dur_Data1$Income_8_to_9<-ifelse(Dur_Data1$Income<=9 & Dur_Data1$Income>7 ,1,0)
+
+data_income=sqldf("select Household_ID,sum(Total_Cat_Purch) as ALL_CAT,sum(ECat_1) as ECAT_1, sum(ECat_2) as ECAT_2, sum(ECat_3) as ECAT_3, sum(ECat_4) as ECAT_4, sum(ECat_5) as ECAT_5, sum(ECat_6) as ECAT_6, sum(ECat_7) as ECAT_7, sum(ECat_8) as ECAT_8, sum(ECat_9) as ECAT_9, sum(ECat_10) as ECAT_10, sum(ECat_11) as ECAT_11, sum(ECat_12) as ECAT_12, sum(ECat_13) as ECAT_13, sum(ECat_14) as ECAT_14, sum(ECat_15) as ECAT_15, max(HH_Age) as HH_Age, max(Income_1_to_3) as Lowest_Income,max(Income_4_to_7) as Med_Income2,max(Income_8_to_9) as Highest_Income3, max(Child_5_and_under) as Child_5_and_under, max(Child_6_to_10) as Child_6_to_10, max(Child_11_to_17) as Child_11_to_17, max(HHMale) as HHMale from Dur_Data1 group by Household_ID having ALL_CAT>3")
+
+data_income= na.omit(data_income)
+data_income=as.data.table(data_income)
+
+```
+
+##Plots for Demographics
+
+```{r}
+
+# Plots for age
+age=data.frame(count(Dur_Data1$Age_H.Head))
+
+plot(age, type="o", col="blue",main="Age - Household Head", xlab="Age",  
+ ylab="Count")
+
+# Plots for Gender
+Gender=data.frame(count(Dur_Data1$GENDER_H.Head))
+
+barplot(Gender$freq, main="Gender- Household Head", xlab="Gender",  
+   ylab="Count", names.arg=c("Female","Male"), 
+   border="blue", density=c(10,20),col = heat.colors(2))
+
+
+#Plots for Income
+income1=data.frame(count(Dur_Data1$Income))
+
+barplot(income1$freq, main="Income", xlab="Category",  
+   ylab="Total", names.arg=c("1","2","3","4","5","6","7","8","9"), border="blue", density=c(10,20,30,40,50,60,70,80,90),col = "blue")
+
+```
+### Question 1 - Through our analysis we hope to identify several customer segments by clustering those with similar purchasing behavior.
+```{r} 
+basisvars = names( data_income[, grep("EC", names(data_income)), with=FALSE ] )
+basisvars
+
+#check the data
+diag( var( data_income[, ..basisvars] ) )
+#remove ECat_15
+basisvars = basisvars[-15] 
+
+# Create a list of normalized variables
+basisvars_n = paste0(basisvars, "_n")   
+# Assign normalized values to each of these new variables:
+data_income[, (basisvars_n) := lapply(.SD, function(x) (x- mean(x))/sd(x)), .SDcols=basisvars ]  
+dim(data_income)
+basisvars_n
+
+#check if normalization worked
+colMeans(data_income[,..basisvars_n])
+```
+
+#Hierarchical Clustering
+```{r}
+d=dist(data_income[,..basisvars_n],method="euclidian")
+data_income[,.N]
+
+fit = hclust(d,method="ward.D")
+plot(fit)
+
+answer <- fit$height
+
+answer =as.data.table(answer)
+```
+
+
+#Elbow Method Plot
+```{r }
+#Elbow Method
+mydata <- data_income
+wss <- (nrow(mydata)-1)*sum(apply(mydata,2,var))
+  for (i in 2:15) wss[i] <- sum(kmeans(mydata,
+                                       centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters",
+     ylab="Within groups sum of squares",
+     main="Assessing the Optimal Number of Clusters with the Elbow Method",
+     pch=20, cex=2)
+
+```
+
+#K-Means
+```{r}
+km <- kmeans( data_income[, ..basisvars_n], 3)
+data_income[, seg := km$cluster]
+km$size
+
+data_income[, .N, seg][order(seg)] 
+
+a =data_income[, lapply(.SD,mean), seg, .SDcols = basisvars_n][order(seg)]
+
+print(t(a))
+```
+
+#Segmentation - Demographic Variables
+
+```{r} 
+names(data_income)
+data_demogvars = names(data_income[, 18:25, with=FALSE])
+
+
+data_demogvars
+
+b=data_income[, lapply( .SD , mean) , .SDcols = data_demogvars, seg][order(seg)]
+print(t(b))
+```
+
+#Qtn 2 How product returns affect future customer purchases?
+
+#Code Used to generate a column for cummulative previous returns per household (not to be run - as new dataframe was exported and can be directly uploaded for use to save time)
+
+```{r}
+#DurData2<- fread('DurData1_Final.csv')
+#DurData2$Return<-ifelse(DurData2$Quantity<0,1,0)
+#newdata=DurData2[order(DurData2$Transaction_NBR)]
+#newdata=DurData2[order(DurData2$Household_ID)]
+#currid=0
+
+#while(currid<nrow(newdata)){
+  #p <- newdata[currid+1, "Household_ID"]
+  #m=sqldf("select count(*) from newdata,p where newdata.Household_ID = p.Household_ID ")
+  #newdata$prevreturn[currid+1]<-0
+  #for(t in 1:m[1,1]){
+    #rowid=currid+t
+    #newdata$prevreturn[rowid+1]<-newdata$Return[rowid]+newdata$prevreturn[rowid]
+    #}
+    #currid=currid+m[1,1]
+    #print(currid)
+#}
+
+#write.csv(newdata,'Previous_Returns.csv')
+```
+
+```{r}
+#Upload dataframe that includes Cummulative Previous Returns
+data3 <- fread('Previous_Returns.csv')
+data3$Purchase<-ifelse(data3$Quantity>=0,1,0)
+data3$EXTENDED_PRICE<-ifelse(data3$EXTENDED_PRICE<=0,0,data3$EXTENDED_PRICE)
+
+data3[!(is.na(data3$Category_Description) | data3$Category_Description=="") & (data3$Category_Description!="EXPRESS") & (data3$Category_Description!="GIFT CARDS"), ]
+
+data3$Cat <- ifelse(data3$Category_Description=='OTHER',1,ifelse(data3$Category_Description=='MAJORS',2,ifelse(data3$Category_Description=='AUDIO',3,ifelse(data3$Category_Description=='VIDEO HDWR',4,ifelse(data3$Category_Description=='P*S*T',5,ifelse(data3$Category_Description=='MOBILE',6,ifelse(data3$Category_Description=='IMAGING',7,ifelse(data3$Category_Description=='"WIRELESS',8,ifelse(data3$Category_Description=='HOME INS',9,ifelse(data3$Category_Description=='TELEVISION',10,ifelse(data3$Category_Description=='PC HDWR',11,ifelse(data3$Category_Description=='MUSIC',12,ifelse(data3$Category_Description=='DVS',13,ifelse(data3$Category_Description=='INTABGIBLE',14,15))))))))))))))
+
+#first attempt
+logit1<-glm(Purchase~prevreturn+log(1+EXTENDED_PRICE)+factor(Category_Description)+Online_Transaction+Income+GENDER_H.Head+Age_H.Head,data=data3, family="binomial")
+summary(logit1)
+
+
+#Removing Extended Price and Adding Interaction between Categories and Previous Returns
+logit2<-glm(Purchase~prevreturn*factor(Cat)+Online_Transaction+Income+GENDER_H.Head+Age_H.Head,data=data3, family="binomial")
+summary(logit2)
+
+```
+
+
+#plot for Question 2
+```{r}
+data_3_plot=sqldf("select Household_ID,max(prevreturn) as Previous_return from data3 group by Household_ID")
+
+data_3_plot0=sqldf("select sum(Previous_return) as Previous_return from data_3_plot WHERE Previous_return>0 group by Previous_return ")
+
+hist(data_3_plot0$Previous_return)
+
+barplot(data_3_plot0$Previous_return, main="previous return", xlab="Prev_return",  
+   ylab="Total", names.arg=c("1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32","33"), 
+   border="blue", density=c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33),col ="lightblue")
+
+```
+
+#Q3 Which products are most likely to be returned, so the store can make better purchasing decisions (in terms of what items they stock/sell)?
+
+```{r}
+#Setting up dataframe for this question
+
+DurData1 <- DurData
+
+DurData1=DurData1[!(is.na(DurData1$Category_Description) | DurData1$Category_Description=="") & (DurData1$Category_Description!="EXPRESS") & (DurData1$Category_Description!="GIFT CARDS"), ]
+
+DurData1$TransactionDate <- as.Date(DurData1$Transaction_Date, "%d%b%Y")
+
+d=as.Date(DurData1$Transaction_Date,"%d%b%Y")
+
+DurData1$Transaction_month=months(d)
+DurData1$Transaction_year=year(d)
+
+DurData1$Month <- ifelse(DurData1$Transaction_month
+=='January',1,ifelse(DurData1$Transaction_month
+=='Febuary',2,ifelse(DurData1$Transaction_month
+=='March',3,ifelse(DurData1$Transaction_month
+=='April',4,ifelse(DurData1$Transaction_month
+=='May',5,ifelse(DurData1$Transaction_month
+=='June',6,ifelse(DurData1$Transaction_month
+=='July',7,ifelse(DurData1$Transaction_month
+=='August',8,ifelse(DurData1$Transaction_month
+=='September',9,ifelse(DurData1$Transaction_month
+=='October',10,ifelse(DurData1$Transaction_month
+=='November',11,ifelse(DurData1$Transaction_month
+=='December',12,13))))))))))))
+```
+
+# Returns for Mobile Category
+```{r}
+DurData1$Returned<-ifelse(DurData1$Quantity<0,1,0)
+
+data_MOBILE=sqldf("select Sub_Category_Description,Transaction_year,Transaction_month, sum(Quantity) as Total_Quant, avg(EXTENDED_PRICE) as Avg_Ext_Price, sum(Returned) as Total_Returned, sum(EXTENDED_PRICE) as Total_Ext_Price from DurData1 where Category_Description=='MOBILE'group by Sub_Category_Description, Transaction_year, Transaction_month")
+
+Y = data_MOBILE[,6]
+N=length(Y)
+Seasonality = c(rep(0,N))
+Seasonality[(data_MOBILE$Transaction_month=='December')|(data_MOBILE$Transaction_month=='January')] =1
+
+
+
+summary(poisson1 <- glm(Total_Returned ~ factor(Sub_Category_Description)+ log(Avg_Ext_Price+2) + Total_Quant,family = 'poisson', data=data_MOBILE))
+
+summary(negbin1 <- glm.nb(Total_Returned ~ factor(Sub_Category_Description)+ log(Avg_Ext_Price+2) + Total_Quant, data=data_MOBILE))
+
+X2 <- 2 * (logLik(negbin1) - logLik(poisson1))
+X2
+pchisq(X2, df = 1, lower.tail=FALSE)
+
+
+summary(negbin2 <- glm.nb(Total_Returned ~ factor(Sub_Category_Description)+ log(Avg_Ext_Price+2) +Seasonality+ Total_Quant,data=data_MOBILE))
+
+exp(coef(negbin2))
+
+anova(negbin2, negbin1, test="Chisq")
+
+#Here the p-value is significant for the second model with the additional term hence we go ahead with the negbin2 model for Category Model 
+```
+
+#Returns for PC HDWR Category
+```{r}
+data_PC_HDWR=sqldf("select Sub_Category_Description,Transaction_year,Transaction_month, sum(Quantity) as Total_Quant, avg(EXTENDED_PRICE) as Avg_Ext_Price, sum(Returned) as Total_Returned, sum(EXTENDED_PRICE) as Total_Ext_Price from DurData1 where Category_Description=='PC HDWR'group by Sub_Category_Description, Transaction_year, Transaction_month")
+
+Y = data_PC_HDWR[,6]
+N=length(Y)
+Seasonality = c(rep(0,N))
+Seasonality[(data_PC_HDWR$Transaction_month=='December')|(data_PC_HDWR$Transaction_month=='January')] =1
+
+summary(negbin3 <- glm.nb(Total_Returned ~ factor(Sub_Category_Description)+ log(Avg_Ext_Price+2) + Total_Quant, data=data_PC_HDWR))
+
+exp(coef(negbin3))
+
+summary(negbin4 <- glm.nb(Total_Returned ~ factor(Sub_Category_Description)+ log(Avg_Ext_Price+2) +Seasonality+ Total_Quant, data=data_PC_HDWR))
+
+exp(coef(negbin4))
+
+anova(negbin4, negbin3, test="Chisq")
+#Significant p-value means we go ahead with additional Seasonality model
+```
+
+#Returns for Television Category
+```{r}
+data_TV=sqldf("select Sub_Category_Description,Transaction_year,Transaction_month, sum(Quantity) as Total_Quant, avg(EXTENDED_PRICE) as Avg_Ext_Price, sum(Returned) as Total_Returned, sum(EXTENDED_PRICE) as Total_Ext_Price from DurData1 where Category_Description=='TELEVISION' group by Sub_Category_Description, Transaction_year,Transaction_month")
+
+Y = data_TV[,6]
+N=length(Y)
+Seasonality = c(rep(0,N))
+
+
+Seasonality[(data_TV$Transaction_month=='December')|(data_TV$Transaction_month=='January')] =1
+
+summary(negbin5 <- glm.nb(Total_Returned ~ factor(Sub_Category_Description)+ log(Avg_Ext_Price+2) + Total_Quant -1, data=data_TV))
+
+exp(coef(negbin5))
+
+summary(negbin6 <- ( glm.nb(Total_Returned ~ factor(Sub_Category_Description)+ log(Avg_Ext_Price+2) + Total_Quant +Seasonality, data=data_TV))) 
+
+exp(coef(negbin6))
+
+anova(negbin6, negbin5, test="Chisq")
+
+#Significant p-value means we choose the model with the additional Seasonlity term
+
+```
+
+
+###plots for Question 3
+
+```{r}
+a=data.frame(count(Dur_Data$Transaction_month))
+
+barplot(a$freq, main="Month", xlab="Month",  
+   ylab="Total", names.arg=c("April","Aug","Dec","Feb","Jan","July","June","Mar","May","Nov","Oct","Sept"), 
+   border="blue", density=c(10,20,30,40,50,60,70,80,90,100,110,120))
+
+###Purchase per month 
+b=sqldf("select EXTENDED_PRICE,Transaction_month from Dur_Data WHERE EXTENDED_PRICE>=0")
+c=data.frame(count(b$Transaction_month))
+
+barplot(a$freq, main="Purchases per month", xlab="Month",  
+   ylab="Total", names.arg=c("April","Aug","Dec","Feb","Jan","July","June","Mar","May","Nov","Oct","Sept"), 
+   border="blue", density=c(10,20,30,40,50,60,70,80,90,100,110,120),col= heat.colors(3))
+
+
+#Returns per month
+d=sqldf("select EXTENDED_PRICE,Transaction_month from DurData1 WHERE EXTENDED_PRICE<0")
+
+e=data.frame(count(d$Transaction_month))
+
+barplot(e$freq, main="Returns per month", xlab="Month",  
+   ylab="Total", names.arg=c("April","Aug","Dec","Feb","Jan","July","June","Mar","May","Nov","Oct","Sept"), 
+   border="blue", density=c(1,2,3,4,5,6,7,8,9,10,11,12),col="blue")
+
+
+## Purchase per category
+
+i=sqldf("select EXTENDED_PRICE,Category_Description from DurData1 WHERE EXTENDED_PRICE>=0")
+g=data.frame(count(i$Category_Description))
+
+barplot(g$freq, main="Purchases per Category", xlab="Category",  
+   ylab="Total", names.arg=c("Audio","DVS","HOME","Image","Intang","Mjrs","MBLE","Music","OTHER","PST","PC","TV","VD","Wireless"), border="blue", density=c(1,2,3,4,5,6,7,8,9,10,11,12,13,14),col = "blue")
+
+##returns per category
+
+h=sqldf("select EXTENDED_PRICE,Category_Description from DurData1 WHERE `EXTENDED_PRICE` <0")
+
+z=data.frame(count(h$Category_Description))
+
+barplot(z$freq, main="Returns per Category", xlab="Category",  
+   ylab="Total", names.arg=c("Audio","DVS","HOME","Image","Intang","Mjrs","MBLE","Music","OTHER","PST","PCHDWR","TV","VDHDWR","Wireless"), 
+   border="blue", density=c(10,20,30,40,50,60,70,80,90,100,110,120,130,140),col ="red")
+
+```
+
+
+
+
